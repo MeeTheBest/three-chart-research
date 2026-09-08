@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astrology-research/schemas/research-analysis.v1.schema.json",
+  "title": "Three-system astrology research analysis v2 contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "analysisId", "caseId", "analysisType", "scenario", "run", "inputAudit", "validationVersion", "claims", "questionDecisions"],
+  "properties": {
+    "schemaVersion": {"const": "research.analysis.v1"},
+    "analysisId": {"type": "string", "minLength": 1},
+    "caseId": {"type": "string", "pattern": "^C[0-9]{2,}$"},
+    "analysisType": {"enum": ["ziwei", "bazi", "vedic", "integration"]},
+    "scenario": {"enum": ["benchmark", "website"]},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "promptVersion", "temperature", "seed", "answerKeyAccess", "knownOutcomeAccess", "networkAccess", "rawDataDocumentIds"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "promptVersion": {"type": "string", "minLength": 1},
+        "temperature": {"const": 0},
+        "seed": {"type": ["integer", "null"]},
+        "answerKeyAccess": {"const": false},
+        "knownOutcomeAccess": {"type": "boolean"},
+        "networkAccess": {"type": "boolean"},
+        "rawDataDocumentIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "inputAudit": {"$ref": "#/$defs/inputAudit"},
+    "validationVersion": {"$ref": "#/$defs/validationVersion"},
+    "professionalAudit": {"type": "array", "items": {"$ref": "#/$defs/professionalAuditItem"}},
+    "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/claim"}},
+    "questionDecisions": {"type": "array", "items": {"$ref": "#/$defs/questionDecision"}}
+  },
+  "$defs": {
+    "systemName": {"enum": ["ziwei", "bazi", "vedic"]},
+    "systemStatus": {"enum": ["analyzed", "not-run", "insufficient-input"]},
+    "rawDataRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "documentId", "pointer"],
+      "properties": {
+        "system": {"$ref": "#/$defs/systemName"},
+        "documentId": {"type": "string", "minLength": 1},
+        "pointer": {"type": "string", "pattern": "^(/([^/~]|~[01])*)*$"},
+        "note": {"type": "string"}
+      }
+    },
+    "theoryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "ruleId", "statement", "sourceRef", "schoolOrTradition"],
+      "properties": {
+        "system": {"$ref": "#/$defs/systemName"},
+        "ruleId": {"type": "string", "minLength": 1},
+        "statement": {"type": "string", "minLength": 1},
+        "sourceRef": {"type": ["string", "null"]},
+        "schoolOrTradition": {"type": ["string", "null"]}
+      }
+    },
+    "inputAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawDataDocumentIdsVerified", "frozenSingleSystemAnalyses", "systemAvailability", "birthTimeSensitivity", "locationPrecision", "issues"],
+      "properties": {
+        "rawDataDocumentIdsVerified": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "frozenSingleSystemAnalyses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ziwei", "bazi", "vedic"],
+          "properties": {
+            "ziwei": {"type": ["string", "null"]},
+            "bazi": {"type": ["string", "null"]},
+            "vedic": {"type": ["string", "null"]}
+          }
+        },
+        "systemAvailability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ziwei", "bazi", "vedic"],
+          "properties": {
+            "ziwei": {"$ref": "#/$defs/systemStatus"},
+            "bazi": {"$ref": "#/$defs/systemStatus"},
+            "vedic": {"$ref": "#/$defs/systemStatus"}
+          }
+        },
+        "birthTimeSensitivity": {"enum": ["stable", "unstable", "unknown", "not-applicable"]},
+        "locationPrecision": {"enum": ["exact", "city-reference", "region-only", "country-only", "unknown"]},
+        "issues": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "validationVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "phase", "parentAnalysisId", "feedbackRecordIds"],
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "phase": {"enum": ["pre-validation", "post-feedback"]},
+        "parentAnalysisId": {"type": ["string", "null"]},
+        "feedbackRecordIds": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "claimScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atomic", "topic", "direction", "timeRange"],
+      "properties": {
+        "atomic": {"const": true},
+        "topic": {"type": "string", "minLength": 1},
+        "direction": {"type": "string", "minLength": 1},
+        "timeRange": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["start", "end", "granularity"],
+              "properties": {
+                "start": {"type": ["string", "null"]},
+                "end": {"type": ["string", "null"]},
+                "granularity": {"enum": ["lifetime", "year", "month", "day", "range"]}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "systemAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "analysisId", "frozen", "conclusion", "rawDataRefs", "theory", "inference", "uncertainty"],
+      "properties": {
+        "status": {"$ref": "#/$defs/systemStatus"},
+        "analysisId": {"type": ["string", "null"]},
+        "frozen": {"type": "boolean"},
+        "conclusion": {"type": "string"},
+        "rawDataRefs": {"type": "array", "items": {"$ref": "#/$defs/rawDataRef"}},
+        "theory": {"type": "array", "items": {"$ref": "#/$defs/theoryItem"}},
+        "inference": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "uncertainty": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "counterEvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "statement", "impact", "rawDataRefs"],
+      "properties": {
+        "system": {"$ref": "#/$defs/systemName"},
+        "statement": {"type": "string", "minLength": 1},
+        "impact": {"enum": ["minor", "moderate", "major"]},
+        "rawDataRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rawDataRef"}}
+      }
+    },
+    "counterEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "searchSummary", "items"],
+      "properties": {
+        "status": {"enum": ["identified", "none-found", "insufficient-input"]},
+        "searchSummary": {"type": "string", "minLength": 1},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/counterEvidenceItem"}}
+      }
+    },
+    "comparisonBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topicAligned", "directionAligned", "timeRangeAligned", "specificityAligned", "notes"],
+      "properties": {
+        "topicAligned": {"type": "boolean"},
+        "directionAligned": {"type": "boolean"},
+        "timeRangeAligned": {"type": "boolean"},
+        "specificityAligned": {"type": "boolean"},
+        "notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "gradeRationale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rawDataDirectness", "timeStability", "theoryChain", "counterEvidenceResistance", "systemIndependence", "explanation"],
+      "properties": {
+        "rawDataDirectness": {"enum": ["strong", "moderate", "weak", "unknown"]},
+        "timeStability": {"enum": ["stable", "partially-stable", "unstable", "unknown", "not-applicable"]},
+        "theoryChain": {"enum": ["complete", "partial", "weak"]},
+        "counterEvidenceResistance": {"enum": ["strong", "moderate", "weak", "unknown"]},
+        "systemIndependence": {"enum": ["three-systems", "two-systems", "single-system", "none"]},
+        "explanation": {"type": "string", "minLength": 1}
+      }
+    },
+    "actionAdvice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "items", "disclaimer"],
+      "properties": {
+        "status": {"enum": ["provided", "not-applicable"]},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "basis", "nonDiagnostic"],
+            "properties": {
+              "text": {"type": "string", "minLength": 1},
+              "basis": {"enum": ["provisional-conclusion", "general-safety"]},
+              "nonDiagnostic": {"type": "boolean"}
+            }
+          }
+        },
+        "disclaimer": {"type": ["string", "null"]}
+      }
+    },
+    "professionalAuditItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auditId", "stage", "title", "rawDataRefs", "theory", "observations", "inference", "counterEvidence", "uncertainty", "status"],
+      "properties": {
+        "auditId": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "rawDataRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rawDataRef"}},
+        "theory": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/theoryItem"}},
+        "observations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "inference": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "counterEvidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "uncertainty": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "status": {"enum": ["completed", "conditional", "insufficient-input"]}
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimId", "claimScope", "claim", "rawDataRefs", "theory", "inference", "counterEvidence", "systemAnalyses", "comparisonBasis", "consistency", "uncertainty", "validation", "falsificationConditions", "evidenceGrade", "gradeRationale", "pollutionRisk", "pollutionRationale", "empiricalUse", "provisionalConclusion", "actionAdvice"],
+      "properties": {
+        "claimId": {"type": "string", "minLength": 1},
+        "claimKey": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_-]*$"},
+        "questionId": {"type": ["string", "null"]},
+        "claimScope": {"$ref": "#/$defs/claimScope"},
+        "claim": {"type": "string", "minLength": 1},
+        "rawDataRefs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rawDataRef"}},
+        "theory": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/theoryItem"}},
+        "inference": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "counterEvidence": {"$ref": "#/$defs/counterEvidence"},
+        "systemAnalyses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ziwei", "bazi", "vedic"],
+          "properties": {
+            "ziwei": {"$ref": "#/$defs/systemAnalysis"},
+            "bazi": {"$ref": "#/$defs/systemAnalysis"},
+            "vedic": {"$ref": "#/$defs/systemAnalysis"}
+          }
+        },
+        "comparisonBasis": {"$ref": "#/$defs/comparisonBasis"},
+        "consistency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "agreements", "conflicts"],
+          "properties": {
+            "status": {"enum": ["aligned", "partial", "conflict", "insufficient"]},
+            "agreements": {"type": "array", "items": {"type": "string", "minLength": 1}},
+            "conflicts": {"type": "array", "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["birthTimeSensitivity", "items"],
+          "properties": {
+            "birthTimeSensitivity": {"enum": ["stable", "unstable", "unknown", "not-applicable"]},
+            "items": {"type": "array", "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "validation": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "falsificationConditions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "evidenceGrade": {"enum": ["S", "A", "B", "C", "D"]},
+        "gradeRationale": {"$ref": "#/$defs/gradeRationale"},
+        "pollutionRisk": {"enum": ["P0", "P1", "P2", "P3"]},
+        "pollutionRationale": {"type": "string", "minLength": 1},
+        "empiricalUse": {"enum": ["validation", "exploratory", "engineering-only"]},
+        "provisionalConclusion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "text", "basisSystems", "conflictRetained"],
+          "properties": {
+            "status": {"enum": ["supported", "conditional", "unable-to-judge"]},
+            "text": {"type": "string", "minLength": 1},
+            "basisSystems": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/systemName"}},
+            "conflictRetained": {"type": "boolean"}
+          }
+        },
+        "actionAdvice": {"$ref": "#/$defs/actionAdvice"}
+      }
+    },
+    "questionDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questionId", "supportingClaimIds", "openEndedAssessment", "selectedOption", "mappingRationale", "confidence"],
+      "properties": {
+        "questionId": {"type": "string", "minLength": 1},
+        "supportingClaimIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "openEndedAssessment": {"type": "string", "minLength": 1},
+        "selectedOption": {"enum": ["A", "B", "C", "D", "ABSTAIN"]},
+        "mappingRationale": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"scenario": {"const": "benchmark"}}},
+      "then": {"properties": {"questionDecisions": {"minItems": 1}}},
+      "else": {"properties": {"questionDecisions": {"maxItems": 0}}}
+    }
+  ]
+}

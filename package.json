@@ -1,0 +1,12 @@
+{
+  "name": "astrology-research",
+  "private": true,
+  "type": "module",
+  "description": "Local research dependencies for the astrology validation prototype",
+  "scripts": {
+    "test:ziwei": "node --test test/ziwei/*.test.js"
+  },
+  "dependencies": {
+    "iztro": "2.5.8"
+  }
+}

@@ -1,0 +1,16 @@
+-r requirements-bazi.txt
+-r requirements-validation.txt
+fastapi==0.141.1
+uvicorn==0.52.4
+SQLAlchemy==2.0.52
+psycopg[binary]==3.3.5
+httpx==0.28.1
+sxtwl==2.0.7
+pysweph==2.10.3.6
+pytz==2026.3.post1
+numpy==2.5.2
+geocoder==1.38.1
+geopy==2.5.0
+requests==2.34.2
+timezonefinder==8.2.5
+python-dateutil==2.9.0.post0

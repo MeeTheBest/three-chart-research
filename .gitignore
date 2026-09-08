@@ -1,0 +1,13 @@
+node_modules/
+.pnpm-store/
+bazi-calc-env/
+private/
+data/local-audit/
+__pycache__/
+*.pyc
+vedic-calc-env/
+.deploy-env/
+.deploy-source/
+.env*
+.DS_Store
+*.sqlite3*

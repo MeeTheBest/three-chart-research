@@ -1,0 +1,4 @@
+interface:
+  display_name: "子平八字命理分析"
+  short_description: "按传统子平与盲派方法完成四柱排盘并生成结构化命理解读"
+  default_prompt: "Use $ziping-bazi-analysis to collect my birth details, calculate the chart, and provide a clearly qualified traditional Bazi reading."
