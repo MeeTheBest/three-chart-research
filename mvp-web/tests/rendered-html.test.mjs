@@ -16,7 +16,8 @@ test("keeps staged progress and comparison-only safeguards in the client", async
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(page, /比较层，不是第四套命理/);
   assert.doesNotMatch(page, /className="lock"/);
-  assert.match(page, /不输出统一人生结论/);
+  assert.doesNotMatch(page, /RESEARCH MODE · 匿名临时会话/);
+  assert.doesNotMatch(page, /先独立分析，再比较一致与冲突/);
   assert.doesNotMatch(page, /<b>Raw Data<\/b>/);
   assert.doesNotMatch(page, /<b>Theory<\/b>/);
   assert.doesNotMatch(page, /title="现实验证"/);
