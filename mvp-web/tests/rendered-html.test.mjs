@@ -14,7 +14,8 @@ test("exports the astrology research workspace as static HTML", async () => {
 
 test("keeps staged progress and comparison-only safeguards in the client", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /比较层，不是第四套命理/);
+  assert.doesNotMatch(page, /比较层，不是第四套命理/);
+  assert.doesNotMatch(page, /className="lock"/);
   assert.match(page, /不输出统一人生结论/);
   assert.doesNotMatch(page, /<b>Raw Data<\/b>/);
   assert.doesNotMatch(page, /<b>Theory<\/b>/);
