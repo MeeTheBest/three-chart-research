@@ -12,8 +12,9 @@ type ProfessionalAudit = {
   counterEvidence: string[]; uncertainty: string[]; status: string;
 };
 type Analysis = { analysisType: string; professionalAudit?: ProfessionalAudit[]; claims: Claim[] };
+type PartialReport = { status: "incomplete"; message: string; analysis: Analysis; completedStages: string[]; hiddenClaimCount: number };
 type ComparisonStatus = { status: "locked" | "ready"; completedSystems: SystemKey[]; missingSystems?: SystemKey[]; reason?: string };
-type SessionSummary = { sessionId: string; caseId: string; createdAt: string; expiresAt: string; completedSystems: SystemKey[]; comparisonCompleted: boolean };
+type SessionSummary = { sessionId: string; caseId: string; createdAt: string; expiresAt: string; completedSystems: SystemKey[]; incompleteSystems?: (SystemKey | "integration")[]; comparisonCompleted: boolean };
 type HistoryEntry = { sessionId: string; caseId: string; createdAt: string; summary?: SessionSummary };
 type AnalysisProgress = {
   system: SystemKey | "integration"; state: "idle" | "queued" | "running" | "completed" | "failed"; currentStep?: number; totalSteps?: number;
@@ -220,6 +221,7 @@ function DiagnosticCard({ diagnostic }: { diagnostic: Diagnostic }) {
 export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [results, setResults] = useState<Partial<Record<SystemKey | "integration", Analysis>>>({});
+  const [partialReports, setPartialReports] = useState<Partial<Record<SystemKey | "integration", PartialReport>>>({});
   const [comparisonStatus, setComparisonStatus] = useState<ComparisonStatus | null>(null);
   const [busy, setBusy] = useState<SystemKey | "integration" | null>(null);
   const [progress, setProgress] = useState<AnalysisProgress | null>(null);
@@ -275,6 +277,8 @@ export default function Home() {
       if (summary.comparisonCompleted) restored.integration = (await request(`/sessions/${entry.sessionId}/analyses/integration`) as { analysis: Analysis }).analysis;
       setSessionId(entry.sessionId);
       setResults(restored);
+      const partial = await Promise.all((summary.incompleteSystems ?? []).map(async (system) => [system, await request(`/sessions/${entry.sessionId}/analyses/${system}/partial`) as PartialReport] as const));
+      setPartialReports(Object.fromEntries(partial));
       setDiagnostics({});
       setProgress(null);
       setComparisonStatus({ status: completed.length === systems.length ? "ready" : "locked", completedSystems: completed, missingSystems: systems.filter((system) => !completed.includes(system.key)).map((system) => system.key) });
@@ -300,7 +304,7 @@ export default function Home() {
     writeHistory(next);
     setHistoryEntries(next);
     if (sessionId === entry.sessionId) {
-      setSessionId(null); setResults({}); setDiagnostics({}); setComparisonStatus(null); setMessage("历史会话已删除。");
+      setSessionId(null); setResults({}); setPartialReports({}); setDiagnostics({}); setComparisonStatus(null); setMessage("历史会话已删除。");
     }
     setHistoryBusy(null);
   }
@@ -309,6 +313,7 @@ export default function Home() {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy("integration"); setMessage("正在创建临时会话…");
     try {
       const data = await request("/sessions", { method: "POST", body: JSON.stringify({ date: form.get("date"), time: form.get("time"), place: form.get("place"), gender: form.get("gender"), baziTimeStandard: trueSolar ? "true_solar" : "civil" }) });
+      setPartialReports({});
       setSessionId(data.sessionId); setResults({}); setDiagnostics({}); setComparisonStatus({ status: "locked", completedSystems: [], missingSystems: systems.map((system) => system.key) }); rememberSession({ sessionId: data.sessionId, caseId: data.caseId, createdAt: new Date().toISOString() }); setMessage("出生信息已准备好，请选择分析体系。");
     } catch (error) { setMessage(displayError(error, "无法创建会话。")); } finally { setBusy(null); }
   }
@@ -326,6 +331,7 @@ export default function Home() {
       const diagnostic = await request(`/sessions/${sessionId}/analyses/${system}/diagnostic`) as Diagnostic;
       if (diagnostic.status !== "completed") setDiagnostics((old) => ({ ...old, [system]: diagnostic }));
       setResults((old) => ({ ...old, [system]: data.analysis }));
+      setPartialReports((old) => { const next = { ...old }; delete next[system]; return next; });
       setComparisonStatus(data.comparison as ComparisonStatus);
       setMessage(`${systemNames([system])}报告已生成，请下滑查看。`);
     } catch (error) {
@@ -333,7 +339,7 @@ export default function Home() {
         const diagnostic = await request(`/sessions/${sessionId}/analyses/${system}/diagnostic`) as Diagnostic;
         setDiagnostics((old) => ({ ...old, [system]: diagnostic }));
       } catch { /* The primary failure is shown above even if the diagnostic endpoint is unavailable. */ }
-      setMessage(displayError(error, "分析未完成。"));
+      await showPartialReport(system, error);
     }
     finally { setBusy(null); setProgress(null); }
   }
@@ -361,18 +367,26 @@ export default function Home() {
   async function compare() {
     if (results.integration) { document.querySelector(".integration-report")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     if (!sessionId) return; setBusy("integration"); setMessage("仅比较三份已冻结的单术结论，不生成统一人生结论…");
-    try { await request(`/sessions/${sessionId}/comparison`, { method: "POST" }); const data = await waitForReport(sessionId, "integration"); setResults((old) => ({ ...old, integration: data.analysis })); setMessage("三术比较已完成，冲突已保留。"); }
-    catch (error) { setMessage(displayError(error, "比较未完成。")); } finally { setBusy(null); setProgress(null); }
+    try { await request(`/sessions/${sessionId}/comparison`, { method: "POST" }); const data = await waitForReport(sessionId, "integration"); setResults((old) => ({ ...old, integration: data.analysis })); setPartialReports((old) => { const next = { ...old }; delete next.integration; return next; }); setMessage("三术比较已完成，冲突已保留。"); }
+    catch (error) { await showPartialReport("integration", error); } finally { setBusy(null); setProgress(null); }
+  }
+
+  async function showPartialReport(system: SystemKey | "integration", error: unknown) {
+    try {
+      const partial = await request(`/sessions/${sessionId}/analyses/${system}/partial`) as PartialReport;
+      setPartialReports((old) => ({ ...old, [system]: partial }));
+      setMessage("本次分析未全部完成，已保留可查看内容，请下滑查看。");
+    } catch { setMessage(displayError(error, "本次分析未完成，已保存的内容可在历史记录中查看。")); }
   }
 
   const allSinglesDone = systems.every((system) => Boolean(results[system.key]));
   const comparisonReady = comparisonStatus?.status === "ready" || allSinglesDone;
   const missingSystems = comparisonStatus?.missingSystems ?? systems.filter((system) => !results[system.key]).map((system) => system.key);
   const missingNames = missingSystems.map((key) => systems.find((system) => system.key === key)?.name).filter(Boolean).join("、");
-  const anyReport = Object.values(results).some(Boolean);
+  const anyReport = Object.values(results).some(Boolean) || Object.values(partialReports).some(Boolean);
   return <main className="shell">
     <header className="hero"><div className="hero-heading"><div><h1>三术命盘研究台</h1></div><button className="history-button" type="button" onClick={() => void openHistory()}>历史记录</button></div></header>
-    {historyOpen && <section className="history-panel" aria-label="历史记录"><div className="history-heading"><div><p className="eyebrow">HISTORY</p><h2>历史记录</h2><p>仅显示此浏览器创建的匿名会话；报告保留 24 小时，到期后不可访问，过期数据将在服务清理时删除。</p></div><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></div>{historyEntries.length ? <div className="history-list">{historyEntries.map((entry) => <article key={entry.sessionId}><div><b>{formatHistoryDate(entry.summary?.createdAt ?? entry.createdAt)}</b><p>{entry.summary?.completedSystems.length ? `已完成：${systemNames(entry.summary.completedSystems)}${entry.summary.comparisonCompleted ? "；已完成三术比较" : ""}` : "会话已创建，尚未冻结单术报告"}</p></div><div><button type="button" disabled={historyBusy !== null} onClick={() => void restoreHistory(entry)}>{historyBusy === entry.sessionId ? "加载中…" : "查看"}</button><button className="history-delete" type="button" disabled={historyBusy !== null} onClick={() => void deleteHistory(entry)}>删除</button></div></article>)}</div> : <p className="history-empty">暂无仍在保留期内的历史记录。</p>}</section>}
+    {historyOpen && <section className="history-panel" aria-label="历史记录"><div className="history-heading"><div><p className="eyebrow">HISTORY</p><h2>历史记录</h2><p>仅显示此浏览器创建的匿名会话；报告保留 24 小时，到期后不可访问，过期数据将在服务清理时删除。</p></div><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></div>{historyEntries.length ? <div className="history-list">{historyEntries.map((entry) => <article key={entry.sessionId}><div><b>{formatHistoryDate(entry.summary?.createdAt ?? entry.createdAt)}</b><p>{entry.summary?.completedSystems.length ? `已完成：${systemNames(entry.summary.completedSystems)}${entry.summary.comparisonCompleted ? "；已完成三术比较" : ""}` : entry.summary?.incompleteSystems?.length ? "有未完成报告，已保留可查看内容" : "会话已创建，尚未生成报告"}</p></div><div><button type="button" disabled={historyBusy !== null} onClick={() => void restoreHistory(entry)}>{historyBusy === entry.sessionId ? "加载中…" : "查看"}</button><button className="history-delete" type="button" disabled={historyBusy !== null} onClick={() => void deleteHistory(entry)}>删除</button></div></article>)}</div> : <p className="history-empty">暂无仍在保留期内的历史记录。</p>}</section>}
     <section className="workspace">
       <form className="birth-form" onSubmit={startSession}><div className="section-heading"><div><h2>出生信息</h2></div></div><div className="form-grid">
         <label>出生日期<input name="date" type="date" required onClick={openPicker} /></label><div className="time-picker-field"><span>出生时间</span><button className={`time-field${birthTime ? "" : " placeholder"}`} type="button" onClick={() => { const [hour = "00", minute = "00"] = birthTime.split(":"); setPendingHour(hour); setPendingMinute(minute); setTimePickerOpen((open) => !open); }}>{birthTime || "请选择出生时间"}</button>{timePickerOpen && <div className="time-dropdown"><div className="time-columns"><div className="time-column" aria-label="小时">{hourOptions.map((hour) => <button type="button" className={pendingHour === hour ? "selected" : ""} key={hour} onClick={() => setPendingHour(hour)}>{hour}</button>)}</div><div className="time-column" aria-label="分钟">{minuteOptions.map((minute) => <button type="button" className={pendingMinute === minute ? "selected" : ""} key={minute} onClick={() => setPendingMinute(minute)}>{minute}</button>)}</div></div><button className="time-confirm" type="button" onClick={() => { setBirthTime(`${pendingHour}:${pendingMinute}`); setTimePickerOpen(false); }}>确认</button></div>}<input type="hidden" name="time" value={birthTime} /></div><div className="wide area-picker"><span>出生地点</span><button className="location-field" type="button" onClick={() => setLocationPickerOpen((open) => !open)}>{selectedPlace || "点击选择省份、城市"}</button>{locationPickerOpen && <div className="location-dropdown"><label>省份<select required value={provinceCode} onChange={(event) => { setProvinceCode(event.target.value); setCityCode(""); }}><option value="">选择省份</option>{provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label>城市<select required disabled={!provinceCode} value={cityCode} onChange={(event) => { setCityCode(event.target.value); if (event.target.value) setLocationPickerOpen(false); }}><option value="">选择城市</option>{cities.map((item) => <option key={item.code} value={item.code}>{item.name === "市辖区" ? areaData["86"]?.[provinceCode] : item.name}</option>)}</select></label></div>}<input type="hidden" name="place" value={selectedPlace} /></div>
@@ -381,9 +395,17 @@ export default function Home() {
       {message && <p className="status" aria-live="polite">{message}</p>}
       {Object.values(diagnostics).some((diagnostic) => diagnostic && diagnostic.status !== "completed") ? <section className="diagnostics"><h2>运行诊断</h2>{systems.map((system) => diagnostics[system.key] ? <DiagnosticCard key={system.key} diagnostic={diagnostics[system.key]!} /> : null)}</section> : null}
       {progress && ["queued", "running", "completed"].includes(progress.state) && <ProgressCard progress={progress} />}
-      <section className="analysis-panel"><div className="section-heading"><div><h2>选择分析体系</h2></div></div><div className="system-list">{systems.map((system) => <article className="system-card" key={system.key}><div><p className="system-label">{system.name}</p><p className="system-subtitle">{system.subtitle}</p></div><ChartArt system={system.key} /><div className="system-actions"><span className={`system-state${results[system.key] ? " done" : ""}`} role="status">{results[system.key] ? "✓ 已分析" : busy === system.key ? "◌ 分析中" : diagnostics[system.key]?.status === "failed" ? "○ 未完成" : "○ 待分析"}</span><button type="button" disabled={!sessionId || (!results[system.key] && busy !== null)} onClick={() => analyze(system.key)}>{busy === system.key ? "分析中…" : results[system.key] ? "查看报告" : diagnostics[system.key]?.status === "failed" ? "继续分析" : "开始分析"}</button></div></article>)}</div></section>
+      <section className="analysis-panel"><div className="section-heading"><div><h2>选择分析体系</h2></div></div><div className="system-list">{systems.map((system) => <article className="system-card" key={system.key}><div><p className="system-label">{system.name}</p><p className="system-subtitle">{system.subtitle}</p></div><ChartArt system={system.key} /><div className="system-actions"><span className={`system-state${results[system.key] ? " done" : ""}`} role="status">{results[system.key] ? "✓ 已分析" : busy === system.key ? "◌ 分析中" : (partialReports[system.key] || diagnostics[system.key]?.status === "failed") ? "○ 未完成" : "○ 待分析"}</span><button type="button" disabled={!sessionId || (!results[system.key] && busy !== null)} onClick={() => analyze(system.key)}>{busy === system.key ? "分析中…" : results[system.key] ? "查看报告" : (partialReports[system.key] || diagnostics[system.key]?.status === "failed") ? "继续分析" : "开始分析"}</button></div></article>)}</div></section>
       <section className={`comparison${comparisonReady ? " comparison-ready" : ""}`}><div className="section-heading"><div><h2>三术比较</h2><p>查看三术分析的共通之处与分歧之处。</p></div></div><div className="comparison-body"><div><p>{comparisonReady ? "三项单术已冻结，可比较一致、部分一致、冲突与不确定性。" : sessionId ? `尚需完成：${missingNames || "三项单术分析"}。` : "完成三项分析后解锁"}</p></div><button type="button" disabled={!comparisonReady || busy !== null} onClick={compare}>{busy === "integration" ? "比较中…" : results.integration ? "查看比较结果" : "开始比较"}</button></div></section>
       {anyReport && <section className="reports"><div className="report-heading"><div><p className="eyebrow">RESEARCH REPORT</p><h2>研究报告</h2></div><button className="export" type="button" onClick={() => window.print()}>导出 / 保存为 PDF</button></div>{systems.map((system) => results[system.key] && <section className="report-section" id={`report-${system.key}`} key={system.key}><h3>{system.name} · 单术分析</h3><ReportSummary claims={results[system.key]?.claims ?? []} />{results[system.key]?.professionalAudit?.length ? <details className="professional-audit"><summary>查看专业推演与盘面依据（{results[system.key]?.professionalAudit?.length} 个阶段）</summary>{results[system.key]?.professionalAudit?.map((audit) => <AuditCard key={audit.auditId} audit={audit} />)}</details> : null}<ClaimSections claims={results[system.key]?.claims ?? []} comparison={false} /></section>)}{results.integration && <section className="report-section integration-report"><h3>三术比较 · 仅展示一致与冲突</h3><ReportSummary claims={results.integration.claims} comparison /><ClaimSections claims={results.integration.claims} comparison /></section>}</section>}
+      {Object.entries(partialReports).filter(([key]) => !results[key as SystemKey | "integration"]).map(([key, report]) => report && <section className="reports partial-report" key={key} id={`partial-${key}`}>
+        <div className="partial-notice" role="status"><strong>本次报告未全部完成</strong><p>{report.message}</p></div>
+        <h3>{key === "integration" ? "三术比较" : systems.find((system) => system.key === key)?.name} · 已保留内容</h3>
+        {report.analysis.claims.length ? <ClaimSections claims={report.analysis.claims} comparison={key === "integration"} /> : <p>暂时没有通过检查的结论可展示。已完成阶段和原始记录仍然保留，不会用推测补齐。</p>}
+        {report.hiddenClaimCount > 0 && <p>{report.hiddenClaimCount} 条内容尚未通过检查，暂不展示。</p>}
+        {report.completedStages.length > 0 && <details><summary>查看已完成阶段（{report.completedStages.length}）</summary><ul>{report.completedStages.map((stage) => <li key={stage}>{stage}</li>)}</ul></details>}
+        <button className="continue-report" type="button" disabled={busy !== null} onClick={() => key === "integration" ? compare() : analyze(key as SystemKey)}>继续完成报告</button>
+      </section>)}
     </section><footer><button type="button" className="footer-export" disabled={!anyReport} onClick={() => window.print()}>报告导出 PDF</button><a href="/api/source" target="_blank" rel="noreferrer">开源代码与许可</a></footer>
   </main>;
 }

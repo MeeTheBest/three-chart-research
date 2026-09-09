@@ -217,6 +217,7 @@ class EphemeralSessionStore:
             "createdAt": session.created_at.isoformat(),
             "expiresAt": session.expires_at.isoformat(),
             "completedSystems": completed,
+            "incompleteSystems": [system for system in (*SYSTEMS, "integration") if session.diagnostics.get(system, {}).get("status") == "failed" and system not in completed and not (system == "integration" and session.integration)],
             "comparisonCompleted": session.integration is not None,
         }
 

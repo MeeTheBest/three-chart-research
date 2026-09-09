@@ -8,7 +8,7 @@
   "properties": {
     "schemaVersion": {"const": "research.analysis.v1"},
     "analysisId": {"type": "string", "minLength": 1},
-    "caseId": {"type": "string", "pattern": "^C[0-9]{2,}$"},
+    "caseId": {"type": "string", "pattern": "^C(?:[0-9]{2,}|[0-9a-f]{16})$"},
     "analysisType": {"enum": ["ziwei", "bazi", "vedic", "integration"]},
     "scenario": {"enum": ["benchmark", "website"]},
     "run": {

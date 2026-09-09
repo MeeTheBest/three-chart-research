@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.mvp import local_server as research
+from src.mvp.report_recovery import recover_report
 from src.mvp.persistence import SnapshotRepository
 from src.mvp.session_store import EphemeralSessionStore, SessionNotFound, SYSTEMS
 
@@ -107,6 +108,9 @@ class Jobs:
                     diagnostic = research.STATE.store.get_diagnostic(session_id, system)
                     diagnostic.update(status="failed", failure=failure(exc))
                     research.STATE.store.set_diagnostic(session_id, system, diagnostic)
+                    saved = research.STATE.store.get_checkpoint(session_id, system)
+                    saved["partialReport"] = recover_report(research, session_id, system)
+                    research.STATE.store.set_checkpoint(session_id, system, saved)
                     research.STATE.store.set_analysis_progress(session_id, system, {**previous, "state": "failed", "label": failure(exc)["message"], "error": failure(exc)})
                 except Exception:
                     # Database failure is visible to HTTP requests; retrying a
@@ -271,6 +275,18 @@ def get_analysis(session_id: str, system: str):
     if analysis is None:
         raise research.ApiError(404, "analysis_not_found", "该报告尚未生成。")
     return {"analysis": analysis, "comparison": store.comparison_status(session_id)}
+
+
+@app.get("/api/sessions/{session_id}/analyses/{system}/partial")
+def partial_report(session_id: str, system: str):
+    if system not in (*SYSTEMS, "integration"):
+        raise research.ApiError(404, "unknown_system", "未知分析体系。")
+    store = research.STATE.store
+    diagnostic = store.get_diagnostic(session_id, system)
+    if diagnostic.get("status") != "failed":
+        raise research.ApiError(404, "partial_not_found", "当前没有未完成报告。")
+    saved = store.get_checkpoint(session_id, system)
+    return saved.get("partialReport") or recover_report(research, session_id, system)
 
 
 @app.post("/api/sessions/{session_id}/analyses/{system}", status_code=202)

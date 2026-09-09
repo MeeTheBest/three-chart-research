@@ -712,6 +712,9 @@ def _draft_text(value: Any, fallback: str) -> str:
 
 
 def _draft_list(value: Any, fallback: list[str], *, max_items: int = 3) -> list[str]:
+    # A single text item is losslessly normalized, never replaced by a guess.
+    if isinstance(value, str) and value.strip():
+        value = [value]
     if not isinstance(value, list):
         return fallback
     items = [item.strip() for item in value if isinstance(item, str) and item.strip()]
@@ -1597,6 +1600,8 @@ class AnalysisService:
         ))
         try:
             birth, case_id = STATE.store.get_birth_input(session_id), STATE.case_id(session_id)
+            from src.mvp.report_recovery import preflight_metadata
+            preflight_metadata(sys.modules[__name__], single_fixed_metadata(system, case_id, f"{case_id}.{system}.raw.v1", birth))
             raw = checkpoint.get("raw")
             if raw is None:
                 raw = command_raw(system, birth, case_id)
