@@ -9,6 +9,11 @@ test("exports the astrology research workspace as static HTML", async () => {
   assert.match(html, /子平八字/);
   assert.match(html, /吠陀占星/);
   assert.match(html, /三术比较/);
+  assert.match(html, /选择分析体系/);
+  assert.match(html, /排盘/);
+  assert.match(html, /待分析/);
+  assert.match(html, /报告导出 PDF/);
+  assert.match(html, /type="radio" name="gender"/);
   assert.doesNotMatch(html, /name="(?:timezone|latitude|longitude)"/i);
 });
 
@@ -45,4 +50,8 @@ test("keeps staged progress and comparison-only safeguards in the client", async
   assert.doesNotMatch(page, /pagehide/);
   assert.doesNotMatch(page, /waiting-context/);
   assert.match(page, /Math\.min\(94,/);
+  assert.match(page, /if \(results\[system\]\).*scrollIntoView/);
+  assert.match(page, /if \(results.integration\).*scrollIntoView/);
+  assert.match(page, /id=\{`report-\$\{system.key\}`\}/);
+  assert.match(page, /disabled=\{!anyReport\}/);
 });
