@@ -64,6 +64,22 @@ class RecoveryTest(unittest.TestCase):
     def test_single_text_list_is_preserved_not_invented(self):
         self.assertEqual(research._draft_list("原始反证条件", ["默认值"]), ["原始反证条件"])
 
+    def test_single_recovery_validates_with_full_audit_before_hiding_it(self):
+        drafts = [{"theory": [{"ruleId": "test", "statement": "测试规则"}],
+                   "observations": ["观察"], "inference": ["推演"],
+                   "counterEvidence": ["相反信号"], "uncertainty": ["待核验"], "status": "completed"}
+                  for _ in research.PROFESSIONAL_AUDIT_STAGES["bazi"]]
+        claims = [{"claimKey": spec["claimKey"], "claim": "有条件倾向", "direction": "待验证",
+                   "sourceAuditIds": ["bazi-audit-pillars"], "inference": ["条件判断"],
+                   "uncertainty": ["待核验"], "validation": ["观察记录"],
+                   "falsificationConditions": ["相反事实"], "provisionalConclusion": "有条件倾向", "actionAdvice": []}
+                  for spec in research.CLAIM_SPECS]
+        self.store.set_checkpoint(self.sid, "bazi", {"raw": {"test": True}, "professionalDrafts": drafts, "groups": {"all": claims}})
+        result = recover_report(research, self.sid, "bazi")
+        self.assertTrue(result["analysis"]["claims"])
+        self.assertNotIn("professionalAudit", result["analysis"])
+        self.assertEqual(len(result["completedStages"]), 7)
+
 
 if __name__ == "__main__":
     unittest.main()

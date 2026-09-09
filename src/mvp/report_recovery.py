@@ -52,12 +52,13 @@ def recover_report(research, session_id, system):
             audits = research.professional_audit_from_drafts(system, document, drafts)
             analysis = research.single_analysis_from_draft(system, research.single_fixed_metadata(system, case_id, document_id, store.get_birth_input(session_id)), document, draft, audits)
         analysis = deepcopy(analysis)
-        # Unchecked professional prose remains in diagnostics, not public claims.
-        analysis.pop("professionalAudit", None)
+        # Validate against the original audit chain; only omit its prose after
+        # validation, when building the presentation-only partial envelope.
         initial_count = len(analysis["claims"])
         while analysis["claims"]:
             issues = research.validate_analysis(analysis, raw_documents)
             if not issues:
+                analysis.pop("professionalAudit", None)
                 result["analysis"] = analysis
                 break
             indices = set()
