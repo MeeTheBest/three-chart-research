@@ -12,7 +12,7 @@ services:
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: QWEN_MODEL
-        value: qwen3.7-max-2026-06-08
+        value: kimi-k2.7-code
       - key: QWEN_MAX_OUTPUT_TOKENS
         value: "16000"
       - key: SOURCE_REPOSITORY_URL

@@ -39,7 +39,7 @@ SCHEMA_PATH = ROOT / "schemas" / "research-analysis.v1.schema.json"
 PROMPTS = ROOT / "prompts"
 # Qwen is used through Model Studio's OpenAI-compatible Chat Completions API.
 # The endpoint can be overridden for a regional or workspace-specific gateway.
-MODEL = os.environ.get("QWEN_MODEL", "qwen3.7-max-2026-06-08")
+MODEL = os.environ.get("QWEN_MODEL", "kimi-k2.7-code")
 API_URL = os.environ.get("QWEN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
 # Full original Skill stages can legitimately need long, structured answers.
 # This is an output ceiling, not a prompt-compression setting.
@@ -572,7 +572,7 @@ def qwen_json(
             "model": MODEL,
             "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt + retry_suffix}],
             "temperature": 0,
-            # qwen3.7-max-2026-06-08 is a thinking model. Each stage is stateless, so no
+            # Each stage is stateless, so no
             # reasoning trace is sent into a later call; only frozen JSON is.
             "enable_thinking": True,
             "response_format": {"type": "json_object"},

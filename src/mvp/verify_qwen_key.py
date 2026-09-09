@@ -22,7 +22,7 @@ def main() -> int:
         print("未读取到通义千问（百炼）API Key。", file=sys.stderr)
         return 1
     api_url = os.environ.get("QWEN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
-    model = os.environ.get("QWEN_MODEL", "qwen3.7-max-2026-06-08")
+    model = os.environ.get("QWEN_MODEL", "kimi-k2.7-code")
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": "Return exactly {\"ok\":true} as JSON."}],
