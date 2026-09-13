@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from math import cos, pi, sin
+from math import isfinite
+import swisseph as swe
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -51,6 +52,14 @@ class NormalizedBirthTime:
             "termReferenceDatetime": self.term_reference_datetime.isoformat(timespec="seconds"),
             "termReferenceTimezone": TERM_REFERENCE_TIMEZONE,
             "trueSolarCorrectionMinutes": round(self.true_solar_correction_minutes, 3),
+            "timeAlgorithmVersion": "true-solar-v2",
+            "utcOffsetMinutes": self.local_aware_datetime.utcoffset().total_seconds() / 60,
+            "dstOffsetMinutes": (self.local_aware_datetime.dst() or timedelta()).total_seconds() / 60,
+            "equationOfTimeMinutes": round(_equation_of_time_minutes(self.utc_datetime), 6) if self.original.time_standard == "true_solar" else None,
+            "longitudeAndTimezoneCorrectionMinutes": 4 * self.original.longitude - self.local_aware_datetime.utcoffset().total_seconds() / 60 if self.original.time_standard == "true_solar" else None,
+            "equationOfTimeAlgorithm": "Swiss Ephemeris time_equ; apparent minus mean",
+            "swissEphemerisVersion": swe.version,
+            "crossedCivilDate": self.calculation_local_datetime.date() != self.original.local_datetime.date(),
             "minutesToNearestShichenBoundary": self.minutes_to_nearest_shichen_boundary,
             "shichenBoundarySensitive": self.shichen_boundary_sensitive,
             "warnings": list(self.warnings),
@@ -96,19 +105,17 @@ def _resolve_local_datetime(value: datetime, timezone: str, fold: int | None) ->
     return candidates[0]
 
 
-def _equation_of_time_minutes(day_of_year: int) -> float:
-    """Approximate equation of time; sufficient for boundary sensitivity scans."""
-
-    angle = 2 * pi * (day_of_year - 81) / 364
-    return 9.87 * sin(2 * angle) - 7.53 * cos(angle) - 1.5 * sin(angle)
+def _equation_of_time_minutes(instant: datetime) -> float:
+    """Apparent minus mean solar time at the original birth instant."""
+    utc = instant.astimezone(UTC)
+    _, jdut = swe.utc_to_jd(utc.year, utc.month, utc.day, utc.hour, utc.minute,
+                          utc.second + utc.microsecond / 1_000_000)
+    return swe.time_equ(jdut) * 1440
 
 
 def _true_solar_correction_minutes(aware: datetime, longitude: float) -> float:
-    dst = aware.dst() or timedelta(0)
-    standard_offset = (aware.utcoffset() - dst).total_seconds() / 3600
-    standard_meridian = standard_offset * 15
-    longitude_correction = 4 * (longitude - standard_meridian)
-    equation_of_time = _equation_of_time_minutes(aware.timetuple().tm_yday)
+    longitude_correction = 4 * longitude - aware.utcoffset().total_seconds() / 60
+    equation_of_time = _equation_of_time_minutes(aware)
     return longitude_correction + equation_of_time
 
 
@@ -131,10 +138,12 @@ def normalize_birth_time(value: BirthTimeInput, sensitivity_minutes: int = 15) -
     if value.time_standard == "true_solar":
         if value.longitude is None:
             raise ValueError("longitude is required when time_standard='true_solar'")
+        if not isfinite(value.longitude) or not -180 <= value.longitude <= 180:
+            raise ValueError("longitude must be finite and between -180 and 180")
         correction = _true_solar_correction_minutes(aware, value.longitude)
         calculation_datetime = value.local_datetime + timedelta(minutes=correction)
         warnings.append(
-            "True solar time uses an approximate equation-of-time formula; retain the civil-time chart as a comparison."
+            "True solar time is a clock conversion, not a correction of uncertain birth records; retain the original civil time. Coordinate precision limits the result."
         )
 
     distance = _boundary_distance_minutes(calculation_datetime)
@@ -159,4 +168,3 @@ def normalize_birth_time(value: BirthTimeInput, sensitivity_minutes: int = 15) -
         shichen_boundary_sensitive=sensitive,
         warnings=tuple(warnings),
     )
-

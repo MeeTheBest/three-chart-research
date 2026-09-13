@@ -56,6 +56,19 @@ def _original_bazi_cross_check(value: dict[str, Any], primary: dict[str, Any]) -
     try:
         completed = subprocess.run(command, capture_output=True, check=True, timeout=45, cwd=ROOT)
         skill = json.loads(completed.stdout)
+        # Match the primary engine's split clock policy: year/month and Yun
+        # use the original instant in the solar-term reference zone. Day/hour
+        # alone use the selected local (possibly apparent-solar) clock.
+        reference = datetime.fromisoformat(primary["inputAudit"]["termReferenceDatetime"])
+        if reference.replace(tzinfo=None, second=0, microsecond=0) != calculation.replace(second=0, microsecond=0):
+            reference_command = list(command)
+            reference_command[reference_command.index("--date") + 1] = reference.date().isoformat()
+            reference_command[reference_command.index("--time") + 1] = reference.strftime("%H:%M")
+            reference_command[reference_command.index("--timezone") + 1] = str(reference.utcoffset().total_seconds() / 3600)
+            reference_skill = json.loads(subprocess.run(reference_command, capture_output=True, check=True, timeout=45, cwd=ROOT).stdout)
+            for key in ("year_pillar", "month_pillar", "dayun_direction", "dayun_steps", "dayun_start_age", "dayun_start_date"):
+                if key in reference_skill:
+                    skill[key] = reference_skill[key]
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
         detail = getattr(exc, "stderr", b"")
         if isinstance(detail, bytes):
@@ -93,6 +106,8 @@ def _original_bazi_cross_check(value: dict[str, Any], primary: dict[str, Any]) -
         "source": "skill-packs/v1/ziping-bazi-analysis/scripts/run_bazi.py",
         "engine": "sxtwl",
         "calculationDatetime": calculation.isoformat(timespec="minutes"),
+        "solarTermReferenceDatetime": primary["inputAudit"]["termReferenceDatetime"],
+        "clockPolicy": "year/month/Yun: original instant in reference zone; day/hour: selected local clock",
         "pillarsText": skill_pillars,
         "dayunDirection": normalized_skill_direction,
         "dayunStartAge": skill.get("dayun_start_age"),
@@ -116,9 +131,11 @@ def bazi(value: dict[str, Any]) -> dict[str, Any]:
             latitude=value.get("latitude"),
             longitude=value.get("longitude"),
             time_standard=value.get("baziTimeStandard", "civil"),
+            fold=value.get("fold"),
         ),
         value["gender"],
     )
+    result["inputAudit"]["coordinatePrecision"] = "city-reference; not exact birth address"
     result["calendarRawData"]["engineCrossCheck"] = _original_bazi_cross_check(value, result)
     return result
 
@@ -138,6 +155,7 @@ def vedic(value: dict[str, Any]) -> dict[str, Any]:
         place_label=value["place"],
         gender=value["gender"],
         reference_date=date.today(),
+        fold=value.get("fold"),
     )
 
 

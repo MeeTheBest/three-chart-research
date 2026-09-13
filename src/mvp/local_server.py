@@ -403,6 +403,7 @@ def command_raw(system: str, birth: BirthInput, case_id: str) -> dict[str, Any]:
         "latitude": birth.latitude,
         "longitude": birth.longitude,
         "baziTimeStandard": birth.bazi_time_standard,
+        "fold": birth.fold,
     }
     if not birth.timezone:
         raise ApiError(422, "timezone_required", "请填写出生地对应的 IANA 时区，例如 Asia/Shanghai。")
@@ -450,7 +451,8 @@ def chart_preview(system: str, raw: dict[str, Any]) -> dict[str, Any]:
     if system == "bazi":
         calendar, audit = raw["calendarRawData"], raw["inputAudit"]
         correction = audit.get("trueSolarCorrectionMinutes")
-        correction_text = "未启用" if correction is None else f"{float(correction):+.3f} 分钟"
+        enabled = audit.get("timeStandard") == "true_solar"
+        correction_text = "未启用" if not enabled else f"较钟表时间{'提前' if float(correction or 0) < 0 else '推后'} {abs(float(correction or 0)):.2f} 分钟；使用城市参考坐标"
         return {
             "title": "子平八字排盘已完成",
             "note": "以下是确定性历法与四柱信息，尚未生成命理解读。",
@@ -458,6 +460,7 @@ def chart_preview(system: str, raw: dict[str, Any]) -> dict[str, Any]:
                 {"label": "四柱", "value": str(calendar.get("pillarsText", "—"))},
                 {"label": "日主", "value": str(calendar.get("dayMaster", "—"))},
                 {"label": "计算时间", "value": str(audit.get("calculationLocalDatetime", "—"))},
+                {"label": "原始出生时间", "value": str(audit.get("originalLocalDatetime", "—"))},
                 {"label": "真太阳时校正", "value": correction_text},
             ],
         }
@@ -1546,10 +1549,17 @@ class AnalysisService:
                 latitude=float(location["latitude"]),
                 longitude=float(location["longitude"]),
                 bazi_time_standard=str(data.get("baziTimeStandard", "civil")),
+                fold=int(data["fold"]) if data.get("fold") not in (None, "") else None,
             )
             birth.validate()
+            from src.bazi.time_normalizer import _resolve_local_datetime
+            _resolve_local_datetime(datetime.fromisoformat(f"{birth.date}T{birth.time}"), birth.timezone, birth.fold)
             return birth, resolution
         except (KeyError, TypeError, ValueError) as exc:
+            if "ambiguous local time" in str(exc):
+                raise ApiError(422, "ambiguous_birth_time", "当天时钟回拨，这个出生时间出现了两次。请在时间补充说明中选择第一次或第二次。") from exc
+            if "nonexistent local time" in str(exc):
+                raise ApiError(422, "nonexistent_birth_time", "当天时钟向前调整，所填时间不存在，请核对出生记录。") from exc
             if "unknown IANA timezone" in str(exc) or "timezone is required" in str(exc):
                 raise ApiError(
                     422,

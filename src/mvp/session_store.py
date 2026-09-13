@@ -31,8 +31,11 @@ class BirthInput:
     latitude: float | None = None
     longitude: float | None = None
     bazi_time_standard: Literal["civil", "true_solar"] = "civil"
+    fold: int | None = None
 
     def validate(self) -> None:
+        if self.fold not in (None, 0, 1):
+            raise ValueError("fold must be 0 or 1")
         try:
             datetime.strptime(self.date, "%Y-%m-%d")
             datetime.strptime(self.time, "%H:%M")

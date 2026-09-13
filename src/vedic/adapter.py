@@ -279,10 +279,15 @@ def calculate_exact_raw(
     uncertainty_minutes: int = 1,
     reference_date: date = date(2026, 8, 16),
     skill_dir: Path = DEFAULT_SKILL_DIR,
+    fold: int | None = None,
 ) -> dict[str, Any]:
     modules = load_skill_modules(skill_dir)
     local_naive = datetime.combine(birth_date, birth_time)
-    localized = _localize(local_naive, timezone_name)
+    if fold is None:
+        localized = _localize(local_naive, timezone_name)
+    else:
+        from src.bazi.time_normalizer import _resolve_local_datetime
+        localized = _resolve_local_datetime(local_naive, timezone_name, fold)
     chart = modules.engine.calculate_full_chart(
         year=birth_date.year,
         month=birth_date.month,
